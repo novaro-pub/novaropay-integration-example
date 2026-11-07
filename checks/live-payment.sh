@@ -7,6 +7,6 @@ key=$(pbpaste)
 case "$key" in sk_live_in_*) ;; *) echo "the clipboard holds no sk_live_in_ key"; exit 1;; esac
 curl -s https://api.novaro.ink/payments \
   -H "Authorization: Bearer $key" -H "PSP-Version: 2026-11-04.acacia" \
-  -H "Idempotency-Key: psp742-retry-$(date +%s)" -H 'Content-Type: application/json' \
-  -d '{"amount":74321,"currency":"INR","payment_method_data":{"type":"upi"},"merchant_reference":"PSP742-RETRY","customer":{"id":"qa742"}}' |
+  -H "Idempotency-Key: retry-check-$(date +%s)" -H 'Content-Type: application/json' \
+  -d '{"amount":74321,"currency":"INR","payment_method_data":{"type":"upi"},"merchant_reference":"retry-check","customer":{"id":"cus_retry_check"}}' |
   python3 -I -c 'import sys,json; d=json.load(sys.stdin); print(d.get("error") or {k:d.get(k) for k in ("id","status","livemode","expires_at")})'
