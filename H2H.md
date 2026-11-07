@@ -115,7 +115,11 @@ The same as with the hosted page:
 
 - **Deliver on `payment.succeeded`** (the webhook), or on a
   `GET /payments/{id}` that says `succeeded`, whichever comes first, once.
-  Credit `amount_credited`.
+- **Credit `amount_credited`, never `amount`.** A payer who types the UPI
+  ID by hand types the amount too, and can get it wrong. Test it with `000000000004`: you
+  asked ₹1,000.00, `amount_paid` and `amount_credited` are 99900 and
+  `amount_mismatch` is `true`. The table of fields is in
+  [INTEGRATION.md, step 2.6](INTEGRATION.md#26-credit-what-the-payer-paid-test-both-cases).
 - While the payer waits on your page, poll `GET /payments/{id}` every few
   seconds, or push the webhook's result to the page. Stop polling when the
   status is final.
@@ -133,6 +137,7 @@ The same as with the hosted page:
 | UTR `000000000001` | `200`, payment `processing`, then `succeeded` |
 | Webhooks | `payment.created`, `payment.processing` and `payment.succeeded`, every signature valid |
 | The order | `succeeded`, credited ₹512.34, delivered once |
+| ₹1,000 order, UTR `000000000004` | `succeeded`, `amount_paid` and `amount_credited` 99900, `amount_mismatch: true`; the shop credited ₹999.00 |
 | QR image | `200` while waiting, `410` once the payment was final |
 
 ## Hosted page or H2H?

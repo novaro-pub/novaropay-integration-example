@@ -193,6 +193,38 @@ nothing is added, no status. So:
 | `expired` | not paid in time; a late payment can still succeed |
 | `failed` | will not be paid |
 
+### 2.6 Credit what the payer paid: test both cases
+
+A payer can send a different sum than asked: ₹999 instead of ₹1,000, or
+more. The payment still succeeds, and **what you credit is
+`amount_credited`**, never `amount` (what you asked for). Before you go live,
+test both cases, and check that your code credits the right number:
+
+| Test | Magic UTR | `amount` | `amount_payable` | `amount_paid` | `amount_credited` | `amount_mismatch` |
+| --- | --- | --- | --- | --- | --- | --- |
+| paid exactly | `000000000001` | 100000 | 100000 | 100000 | **100000** | `false` |
+| paid ₹1.00 less | `000000000004` | 100000 | 100000 | 99900 | **99900** | `true` |
+
+These numbers are from two test payments on production. The example shop
+stored ₹1,000.00 and ₹999.00 as credited (`applyPayment()` takes
+`amount_credited`).
+
+| Field | What it is | Use it for |
+| --- | --- | --- |
+| `amount` | what you asked for | your order; **not** for crediting |
+| `amount_payable` | what we told the payer to pay (`next_action…amount`); can differ from `amount` by a few paise | what the payer sees |
+| `amount_paid` | what arrived from the payer's bank | reports |
+| `amount_credited` | **what to credit your customer** | the balance, the order |
+| `amount_mismatch` | `true` when the payer paid other than `amount_payable` | flag the order for a look, tell the customer |
+
+- `amount_credited` is your `amount` when the payer paid exactly
+  `amount_payable`, even if `amount_payable` was a few paise off your
+  amount. Otherwise it is `amount_paid`.
+- These fields are `null` until the payment is `succeeded`. Read them from
+  the `payment.succeeded` event's `data.object`, or from `GET /payments/{id}`.
+- `amount_received` is the same as `amount_credited`, under its first name.
+  Use `amount_credited`.
+
 ## 3. Go live
 
 1. **Live key.** Portal with Test mode **off** › Settings › Developers ›
@@ -224,6 +256,7 @@ nothing is added, no status. So:
 - [ ] `2xx` within 10 s; work done after.
 - [ ] Each event id processed once; older `version`s ignored.
 - [ ] The order is delivered from the payment's status, never from the way back.
+- [ ] The customer is credited `amount_credited`, tested with `000000000001` (exact) and `000000000004` (₹1.00 less).
 - [ ] Live key limited by the IP allowlist.
 - [ ] Live endpoint added, its secret deployed, a live event received.
 

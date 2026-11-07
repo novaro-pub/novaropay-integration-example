@@ -227,7 +227,7 @@ createServer(async (req, res) => {
       applyPayment(await api("GET", `/payments/${order.payment}`));
       const words = { succeeded: "Paid, thank you.", processing: "We are checking your payment: this page updates in a moment.", awaiting_payer: "Not paid yet.", expired: "The time to pay ran out.", failed: "Not paid." };
       const refresh = order.status === "processing" || order.status === "awaiting_payer" ? `<meta http-equiv=refresh content=5>` : "";
-      return send(res, 200, page("Your order", `${refresh}<h1>Order ${esc(order.id)}</h1><p>₹${(order.amount / 100).toFixed(2)} · <b>${esc(order.status)}</b></p><p>${words[order.status] ?? ""}</p>${order.flow === "h2h" && order.status === "awaiting_payer" ? `<p><a href="/orders/${esc(order.id)}/pay">Pay now</a></p>` : ""}<p><a href=/>Back to the shop</a></p>`), "text/html");
+      return send(res, 200, page("Your order", `${refresh}<h1>Order ${esc(order.id)}</h1><p>₹${(order.amount / 100).toFixed(2)} · <b>${esc(order.status)}</b></p>${order.credited != null ? `<p>Credited: ₹${(order.credited / 100).toFixed(2)}${order.credited !== order.amount ? " (the payer paid a different sum)" : ""}</p>` : ""}<p>${words[order.status] ?? ""}</p>${order.flow === "h2h" && order.status === "awaiting_payer" ? `<p><a href="/orders/${esc(order.id)}/pay">Pay now</a></p>` : ""}<p><a href=/>Back to the shop</a></p>`), "text/html");
     }
     send(res, 404, "not found");
   } catch (err) {
