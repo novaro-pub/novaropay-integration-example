@@ -80,12 +80,28 @@ on for the account in that mode: ask your account manager.
 
 ### 2.3 Receive webhooks on your machine
 
-Start your server, then forward test events to it:
+Start your server, then forward test events to it. `--forward-to` is the
+address of **your own** webhook handler on your machine: the port your server
+listens on and the path of its webhook route. Do not copy the value below as
+it is: put in yours.
 
 ```sh
-npm start                                            # the example shop, port from .env
-novaro listen --forward-to localhost:3000/webhooks   # in a second terminal
+npm start                                             # your server
+novaro listen --forward-to localhost:<port>/<path>    # in a second terminal
 ```
+
+For example:
+
+| Your server | `--forward-to` |
+| --- | --- |
+| this example shop, `PORT=3000` in `.env`, route `POST /webhooks` | `localhost:3000/webhooks` |
+| Express on port 8080, `app.post("/api/novaro/webhook", …)` | `localhost:8080/api/novaro/webhook` |
+| Django on port 8000, `path("payments/webhook/", …)` | `localhost:8000/payments/webhook/` |
+| a local `https` server with a self-signed certificate | `https://localhost:8443/hooks --skip-verify` |
+
+Without a scheme it is `http://`. If `listen` shows `[404]`, the path is not
+your route; nothing at all in your server's log usually means the port is
+wrong.
 
 `novaro listen --print-secret` prints the signing secret (`whsec_…`) of this
 machine: put it in `NOVARO_WEBHOOK_SECRET`. Now make events happen:
