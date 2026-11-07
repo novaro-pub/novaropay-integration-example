@@ -70,10 +70,10 @@ production:
 
 | Attempt | When | Gap | The docs say |
 | --- | --- | --- | --- |
-| 1 | at once | | at once |
-| 2 | | 1.04 min | 1 min ±10% |
-| 3 | | 5.27 min | 5 min ±10% |
-| 4 | | | 15 min ±10%, answered `200` |
+| 1 | 18:44:04 | | at once |
+| 2 | 18:45:06 | 1.04 min | 1 min ±10% |
+| 3 | 18:50:23 | 5.27 min | 5 min ±10% |
+| 4 | 19:04:16 | 13.89 min, answered `200` | 15 min ±10% |
 
 Every attempt carries the same `PSP-Event-Id` and a new `PSP-Signature`
 (a new `t`). `PSP-Delivery-Attempt` counts up.
