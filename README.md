@@ -9,6 +9,7 @@ Start here:
 | Read | For |
 | --- | --- |
 | **[INTEGRATION.md](INTEGRATION.md)** | the step-by-step guide: test mode with the `novaro` CLI first, then live, and a checklist |
+| **[H2H.md](H2H.md)** | host to host: the payer pays on **your own** page or app, from the payment's `next_action` details, and you pass on their UTR |
 | [HOW-IT-WORKS.md](HOW-IT-WORKS.md) | the payment flow and its statuses in two diagrams, and where each step is in the code |
 | [WEBHOOKS.md](WEBHOOKS.md) | a delivery, the four rules of handling it, secrets, and watching retries yourself |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | every error we met while integrating, what it means and the fix |

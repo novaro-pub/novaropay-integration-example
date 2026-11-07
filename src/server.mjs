@@ -71,9 +71,11 @@ async function api(method, path, { body, idempotencyKey } = {}) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- Orders ----
-async function createOrder(amountRupees) {
+// flow "hosted": our checkout page; flow "h2h": your own page shows the
+// UPI details from next_action (host to host).
+async function createOrder(amountRupees, flow = "hosted") {
   const id = `ord_${randomUUID().slice(0, 8)}`;
-  const order = { id, amount: Math.round(amountRupees * 100), status: "new", created: new Date().toISOString() };
+  const order = { id, flow, amount: Math.round(amountRupees * 100), status: "new", created: new Date().toISOString() };
   orders[id] = order;
   save();
   const payment = await api("POST", "/payments", {
@@ -85,12 +87,23 @@ async function createOrder(amountRupees) {
       payment_method_data: { type: "upi" },
       merchant_reference: id,
       customer: { id: "cus_example" },
-      checkout: { return_url: `${PUBLIC_URL}/orders/${id}` },
+      // Host to host: no checkout. The answer's next_action has the details.
+      ...(flow === "hosted" ? { checkout: { return_url: `${PUBLIC_URL}/orders/${id}` } } : {}),
     },
   });
   Object.assign(order, { payment: payment.id, status: payment.status, version: payment.version ?? 0 });
   save();
-  return { order, checkoutUrl: payment.checkout.url };
+  return { order, checkoutUrl: payment.checkout?.url };
+}
+
+// Host to host: the payer tells you their UTR; pass it on. Optional: we
+// match payments without it, but it is faster with it.
+async function confirmUtr(order, utr) {
+  const payment = await api("POST", `/payments/${order.payment}/confirmations`, {
+    idempotencyKey: `${order.id}:confirm:${utr}`,
+    body: { utr },
+  });
+  applyPayment(payment);
 }
 
 // Applies a payment as the API or an event shows it, never going back to an
@@ -142,6 +155,24 @@ const page = (title, body) =>
   `<body style="font:16px system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem">${body}</body>`;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
+// Host to host: your page with the payment's UPI details.
+function payPage(order, p, error = "") {
+  const d = p.next_action?.upi_display_details;
+  if (!d) return page("Pay", `<p>No UPI details on this payment.</p>`);
+  const rupees = (d.amount / 100).toFixed(2); // amount_payable, may differ from your amount by paise
+  const left = Math.max(0, Math.round((p.expires_at - Date.now() / 1000) / 60));
+  const apps = d.app_links.map((a) => `<a href="${esc(a.url)}">Open ${esc(a.app)}</a>`).join(" · ");
+  return page("Pay", `<h1>Pay ₹${rupees}</h1>
+    <p>Scan with any UPI app:</p>
+    <img src="${esc(d.qr_code.image_url_svg)}" alt="UPI QR code" width=240 height=240>
+    <p>or pay to UPI ID <b>${esc(d.vpa)}</b>, amount <b>₹${rupees}</b>, note <b>${esc(d.reference_code)}</b></p>
+    <p><a href="${esc(d.upi_uri)}">Open a UPI app</a>${apps ? " · " + apps : ""}</p>
+    <p>Time left: about ${left} min.</p>
+    <form method=post><label>Paid? Enter your UTR <input name=utr inputmode=numeric pattern="[0-9]{12}" maxlength=12 required></label> <button>I have paid</button></form>
+    ${error ? `<p style="color:#b00">${esc(error)}</p>` : ""}
+    <p><small>Order ${esc(order.id)}</small></p>`);
+}
+
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const chunks = [];
@@ -151,13 +182,43 @@ createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/webhooks") return webhook(raw, req.headers, res);
     if (req.method === "GET" && url.pathname === "/") {
       return send(res, 200, page("Example shop", `<h1>Example shop</h1><form method=post action=/orders>
-        <label>Amount, ₹ <input name=amount value=499 inputmode=decimal></label> <button>Pay with UPI</button></form>`), "text/html");
+        <label>Amount, ₹ <input name=amount value=499 inputmode=decimal></label>
+        <p><button name=flow value=hosted>Pay with UPI (hosted page)</button>
+        <button name=flow value=h2h>Pay with UPI (our own page, host to host)</button></p></form>`), "text/html");
     }
     if (req.method === "POST" && url.pathname === "/orders") {
-      const amount = Number(new URLSearchParams(raw.toString()).get("amount") ?? 499);
-      const { checkoutUrl } = await createOrder(amount);
-      res.writeHead(303, { Location: checkoutUrl }); // send the payer to our page
+      const form = new URLSearchParams(raw.toString());
+      const amount = Number(form.get("amount") ?? 499);
+      const flow = form.get("flow") === "h2h" ? "h2h" : "hosted";
+      const { order, checkoutUrl } = await createOrder(amount, flow);
+      // Hosted: send the payer to NovaroPay's page. H2H: to your own.
+      res.writeHead(303, { Location: flow === "hosted" ? checkoutUrl : `/orders/${order.id}/pay` });
       return res.end();
+    }
+    const pay = url.pathname.match(/^\/orders\/(ord_[\w-]+)\/pay$/);
+    if (pay && orders[pay[1]]) {
+      const order = orders[pay[1]];
+      if (req.method === "POST") {
+        // The payer's UTR from your form.
+        const utr = (new URLSearchParams(raw.toString()).get("utr") ?? "").trim();
+        try {
+          await confirmUtr(order, utr);
+        } catch (err) {
+          // 400 parameter_invalid: not 12 digits; 409 reference_already_used: another payment's UTR.
+          return send(res, 200, payPage(order, await api("GET", `/payments/${order.payment}`), err.error?.message ?? err.message), "text/html");
+        }
+        res.writeHead(303, { Location: `/orders/${order.id}` });
+        return res.end();
+      }
+      // Read the payment every time you show the page: while it waits for
+      // the payer its details may change (the reference code stays).
+      const p = await api("GET", `/payments/${order.payment}`);
+      applyPayment(p);
+      if (p.status !== "awaiting_payer") {
+        res.writeHead(303, { Location: `/orders/${order.id}` });
+        return res.end();
+      }
+      return send(res, 200, payPage(order, p), "text/html");
     }
     const m = url.pathname.match(/^\/orders\/(ord_[\w-]+)$/);
     if (req.method === "GET" && m && orders[m[1]]) {
@@ -166,7 +227,7 @@ createServer(async (req, res) => {
       applyPayment(await api("GET", `/payments/${order.payment}`));
       const words = { succeeded: "Paid, thank you.", processing: "We are checking your payment: this page updates in a moment.", awaiting_payer: "Not paid yet.", expired: "The time to pay ran out.", failed: "Not paid." };
       const refresh = order.status === "processing" || order.status === "awaiting_payer" ? `<meta http-equiv=refresh content=5>` : "";
-      return send(res, 200, page("Your order", `${refresh}<h1>Order ${esc(order.id)}</h1><p>₹${(order.amount / 100).toFixed(2)} · <b>${esc(order.status)}</b></p><p>${words[order.status] ?? ""}</p><p><a href=/>Back to the shop</a></p>`), "text/html");
+      return send(res, 200, page("Your order", `${refresh}<h1>Order ${esc(order.id)}</h1><p>₹${(order.amount / 100).toFixed(2)} · <b>${esc(order.status)}</b></p><p>${words[order.status] ?? ""}</p>${order.flow === "h2h" && order.status === "awaiting_payer" ? `<p><a href="/orders/${esc(order.id)}/pay">Pay now</a></p>` : ""}<p><a href=/>Back to the shop</a></p>`), "text/html");
     }
     send(res, 404, "not found");
   } catch (err) {

@@ -1,7 +1,9 @@
 # Integrating NovaroPay: step by step
 
 This guide takes your server from nothing to taking UPI payments in India
-through NovaroPay's hosted payment page, with webhooks. Every step was run
+through NovaroPay's hosted payment page, with webhooks. To show the payment
+details on your own page or in your app instead (host to host), follow this
+guide up to step 2.3, then [H2H.md](H2H.md). Every step was run
 against the production API with this repository's example shop
 (`src/server.mjs`), which you can copy from. The full reference is
 [docs.novaro.ink](https://docs.novaro.ink).
