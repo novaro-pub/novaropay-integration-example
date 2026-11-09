@@ -16,14 +16,19 @@ PSP-Event-Id: evt_in_01M6VN6AYAE399R4SSZXSVRCPA
 PSP-Delivery-Attempt: 1
 User-Agent: NovaroPay/1.0 (+https://docs.novaro.ink/webhooks)
 
-{"id":"evt_in_01M6…","object":"event","type":"payment.succeeded","api_version":"2026-11-04.acacia",
- "created":1794076573,"livemode":false,"account":"macc_01M6…",
- "data":{"object":{"id":"pay_in_01M6…","object":"payment","status":"succeeded","version":4,…},
-         "previous_attributes":{"status":"processing"}}, …}
+{"id":"evt_in_01M6…","object":"event","account":"macc_01M6…","api_version":"2026-11-04.acacia",
+ "created":1794076573,
+ "data":{"object":{"id":"pay_in_01M6…","object":"payment","status":"succeeded","version":4,…}},
+ "livemode":false,"pending_webhooks":1,
+ "request":{"id":null,"idempotency_key":null},"type":"payment.succeeded"}
 ```
 
 `data.object` is the payment as `GET /payments/{id}` returns it right after the
-change.
+change. `data.previous_attributes` comes only with
+`payment.instructions_updated`. A delivery always has `request`: the `id` and
+`idempotency_key` of the API request that caused the event, or `null` when none
+did (the payer, a bank, or time passing). `GET /events/{id}` answers
+`"request": null` then.
 
 ## Handling it: four rules
 
