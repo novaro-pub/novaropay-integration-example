@@ -43,6 +43,12 @@ did (the payer, a bank, or time passing). `GET /events/{id}` answers
 4. **Order by `version`, not by arrival.** Two events can arrive swapped.
    Keep the payment's highest `version`, and ignore an event with a lower one.
 
+A run your key created sends `reporting.report_run.succeeded` or
+`reporting.report_run.failed` to the endpoints that listen to them, or to all
+events: add them to yours if it listens to `payment.*` only. They come by the
+same rules, and the shop downloads the report after it has answered. See
+[REPORTS.md](REPORTS.md#3-wait-for-it-webhook-or-polling).
+
 ## Your secret(s)
 
 | Who sends | Its secret |
