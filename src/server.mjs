@@ -1,6 +1,7 @@
 // A merchant's server integrated with NovaroPay from docs.novaro.ink alone:
 // a shop page, POST /payments with the hosted page, the payer's way back,
-// and a webhook handler that checks PSP-Signature. Node.js 20+, no packages.
+// a webhook handler that checks PSP-Signature, and a report's download when
+// its reporting.report_run.succeeded event comes. Node.js 20+, no packages.
 //
 //   node --env-file=.env src/server.mjs
 //
@@ -15,15 +16,19 @@
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { dataDir, reportRuns, sweepEvery } from "./report-runs.mjs";
+import { reportsClient } from "./reports.mjs";
 import { verify } from "./verify.mjs";
 
 const API = process.env.NOVARO_API_BASE ?? "https://api.novaro.ink";
 const KEY = must("NOVARO_API_KEY");
 const SECRETS = must("NOVARO_WEBHOOK_SECRET").split(",").map((s) => s.trim()).filter(Boolean);
-const VERSION = process.env.NOVARO_API_VERSION ?? "2026-11-04.acacia";
+const VERSION = process.env.NOVARO_API_VERSION ?? "2026-11-14.acacia";
 const PUBLIC_URL = must("PUBLIC_URL").replace(/\/$/, "");
 const PORT = Number(process.env.PORT ?? 3000);
-const DATA = new URL("../data/", import.meta.url);
+const DATA = pathToFileURL(dataDir() + "/"); // data/, or NOVARO_DATA_DIR
 mkdirSync(DATA, { recursive: true });
 
 function must(name) {
@@ -143,6 +148,20 @@ function webhook(raw, headers, res) {
   seen.add(event.id);
   if (event.data?.object?.object === "payment") applyPayment(event.data.object);
   save();
+  if (event.type?.startsWith("reporting.report_run.")) reportRunEvent(event.data.object);
+}
+
+// ---- Reports (REPORTS.md) ----
+// The runs npm run report created are swept (src/report-runs.mjs): at start,
+// every REPORTS_SWEEP_MS, and soon after a reporting.report_run.* webhook for
+// one of them, which is only a hint to look.
+const reports = reportsClient({ api: API, key: KEY, version: VERSION, log: (m) => console.log("report  " + m) });
+const runs = reportRuns({ reports, dir: join(dataDir(), "report-runs"), reportsDir: join(dataDir(), "reports") });
+runs.cleanup();
+const sweeps = runs.loop({ every: sweepEvery(process.env.REPORTS_SWEEP_MS) });
+function reportRunEvent(run) {
+  if (runs.kept(run?.id)) sweeps.kick();
+  else console.log(`report ${run?.id}: not a run this shop created; left alone`);
 }
 
 // ---- HTTP ----
@@ -173,7 +192,7 @@ function payPage(order, p, error = "") {
     <p><small>Order ${esc(order.id)}</small></p>`);
 }
 
-createServer(async (req, res) => {
+const http = createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const chunks = [];
   for await (const c of req) chunks.push(c);
@@ -235,3 +254,15 @@ createServer(async (req, res) => {
     send(res, 502, "payment provider error: " + err.message);
   }
 }).listen(PORT, "127.0.0.1", () => console.log(`shop on http://127.0.0.1:${PORT}, public ${PUBLIC_URL}, API ${API}, PSP-Version ${VERSION}, key ${KEY.slice(0, 11)}…`));
+
+// Stopping (Ctrl-C, or SIGTERM from your process manager): no new requests or
+// sweeps, then up to 10 s for a sweep that is running to end.
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.once(signal, async () => {
+    console.log(`${signal}: stopping`);
+    sweeps.stop();
+    http.close();
+    await Promise.race([sweeps.idle(), new Promise((r) => setTimeout(r, 10_000).unref())]);
+    process.exit(0);
+  });
+}

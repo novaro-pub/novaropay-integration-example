@@ -3,5 +3,9 @@
   "private": true,
   "type": "module",
   "engines": { "node": ">=20.6" },
-  "scripts": { "start": "node --env-file=.env src/server.mjs" }
+  "scripts": {
+    "start": "node --env-file=.env src/server.mjs",
+    "report": "node --env-file=.env src/report.mjs",
+    "test": "node --test checks/reports-offline.test.mjs"
+  }
 }

@@ -2,3 +2,5 @@
 data/
 node_modules/
 bin/
+# Report files and anything a run writes: data/reports/, a CSV you download by hand.
+*.csv

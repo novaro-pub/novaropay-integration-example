@@ -233,7 +233,9 @@ stored ₹1,000.00 and ₹999.00 as credited (`applyPayment()` takes
    servers' addresses. A live key is then useless anywhere else.
 3. **Live webhook endpoint.** Settings › Developers › Webhooks › add
    endpoint: your public `https://…/webhooks` URL (a host name, not an IP)
-   and the event types (all, or `payment.*`). Copy its signing secret into
+   and the event types: all, or `payment.*`, and, if you get reports through
+   the API ([REPORTS.md](REPORTS.md)), `reporting.report_run.succeeded` and
+   `reporting.report_run.failed`. Copy its signing secret into
    `NOVARO_WEBHOOK_SECRET`. Several secrets, comma-separated, work in the
    example shop, for when the CLI and an endpoint both send to it. If your
    firewall filters, allow
@@ -272,4 +274,5 @@ payer's way back and for live webhooks: your domain, or a tunnel while you
 try it (`cloudflared tunnel --url http://localhost:3000`). Create a file
 `data/DOWN` to make the shop answer webhooks with `503`, to watch retries.
 `checks/idempotency-and-versions.sh` checks idempotency and `PSP-Version`
-with the test key in `.env`.
+with the test key in `.env`. Reports of your payments through the API:
+[REPORTS.md](REPORTS.md), `npm run report`.
